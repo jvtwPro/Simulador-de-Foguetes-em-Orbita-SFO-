@@ -18,21 +18,33 @@ public class CameraFollow : MonoBehaviour
     void Start()
     {
         cam = GetComponent<Camera>();
+
+        // 🔒 Garante que é ortográfica (2D)
+        cam.orthographic = true;
     }
 
     void LateUpdate()
     {
+        if (alvo == null) return;
+
         SeguirAlvo();
         ControlarZoom();
     }
 
     void SeguirAlvo()
     {
-        if (alvo == null) return;
+        // 🔒 Travando eixo Z (câmera 2D)
+        Vector3 posDesejada = new Vector3(
+            alvo.position.x,
+            alvo.position.y,
+            transform.position.z // mantém Z fixo
+        );
 
-        Vector3 posDesejada = new Vector3(alvo.position.x, alvo.position.y, transform.position.z);
-
-        transform.position = Vector3.Lerp(transform.position, posDesejada, suavidade * Time.deltaTime);
+        transform.position = Vector3.Lerp(
+            transform.position,
+            posDesejada,
+            suavidade * Time.deltaTime
+        );
     }
 
     void ControlarZoom()
@@ -42,6 +54,10 @@ public class CameraFollow : MonoBehaviour
         zoom -= scroll * velocidadeZoom;
         zoom = Mathf.Clamp(zoom, zoomMin, zoomMax);
 
-        cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, zoom, Time.deltaTime * 5f);
+        cam.orthographicSize = Mathf.Lerp(
+            cam.orthographicSize,
+            zoom,
+            Time.deltaTime * 5f
+        );
     }
 }

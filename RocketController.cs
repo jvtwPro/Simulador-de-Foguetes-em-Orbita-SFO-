@@ -4,24 +4,47 @@ using UnityEngine;
 [RequireComponent(typeof(LineRenderer))]
 public class RocketController : MonoBehaviour
 {
-    [Header("Potência")]
-    [Range(0f, 100f)]
-    public float potenciaPercentual = 100f;
-    public float forcaMaxima = 20f;
+    [Header("Motor")]
+    public float potenciaMaxima = 200f;
+    [Range(0f, 100f)] public float throttlePercentual = 100f;
+    public float tempoRespostaMotor = 1.5f;
+
+    private float empuxoAtual = 0f;
 
     [Header("Combustível")]
-    public float combustivelMax = 10f;
-    public float consumoPorSegundo = 1f;
+    public float combustivelMax = 20f;
+    public float consumoPorSegundo = 2f;
+    public float massaCombustivel = 20f;
     private float combustivelAtual;
 
-    [Header("Massa")]
-    public float massa = 1f;
+    [Header("Massa estrutural")]
+    public float massaEstrutural = 10f;
 
-    [Header("Controle")]
-    public float controleRotacao = 50f;
+    [Header("Gravidade")]
+    public float gravidadeEscala = 1f;
+
+    [Header("Gimbal")]
+    public float anguloMaxGimbal = 10f;
+    public float velocidadeGimbal = 50f;
+    private float anguloGimbalAtual = 0f;
+
+    [Header("Alinhamento automático")]
+    public float velocidadeAlinhamento = 5f;
+
+    [Header("Atmosfera")]
+    public float densidadeArNivelMar = 1.225f;
+    public float alturaEscalaAtmosfera = 8000f;
+
+    [Header("Arrasto")]
+    public float coeficienteArrasto = 0.75f;
+    public float areaFrontal = 0.1f;
+
+    [Header("Estágio")]
+    public float massaEstagio = 5f;
+    public bool estagioSeparado = false;
 
     [Header("Trajetória")]
-    public int passos = 50;
+    public int passos = 60;
     public float tempoEntrePontos = 0.1f;
 
     [Header("Estado")]
@@ -30,111 +53,170 @@ public class RocketController : MonoBehaviour
     private Rigidbody2D rb;
     private LineRenderer line;
 
-    private float velocidadeAtual = 0f;
-
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         line = GetComponent<LineRenderer>();
 
-        rb.mass = massa;
         combustivelAtual = combustivelMax;
+
+        AtualizarMassa();
+        rb.gravityScale = gravidadeEscala;
+
+        // Linha
+        line.material = new Material(Shader.Find("Sprites/Default"));
+        line.startColor = Color.white;
+        line.endColor = Color.white;
+
+        // 🔥 Linha fina
+        line.startWidth = 0.05f;
+        line.endWidth = 0.05f;
     }
 
     void Update()
     {
-        // Ajuste de potência
-        if (Input.GetKey(KeyCode.UpArrow))
-            potenciaPercentual += 20f * Time.deltaTime;
-
-        if (Input.GetKey(KeyCode.DownArrow))
-            potenciaPercentual -= 20f * Time.deltaTime;
-
-        potenciaPercentual = Mathf.Clamp(potenciaPercentual, 0f, 100f);
-
-        // Controle de rotação (empuxo vetorial)
         if (Input.GetKey(KeyCode.LeftArrow))
-            transform.Rotate(Vector3.forward * controleRotacao * Time.deltaTime);
+            anguloGimbalAtual += velocidadeGimbal * Time.deltaTime;
 
         if (Input.GetKey(KeyCode.RightArrow))
-            transform.Rotate(Vector3.back * controleRotacao * Time.deltaTime);
+            anguloGimbalAtual -= velocidadeGimbal * Time.deltaTime;
 
-        // Iniciar lançamento
-        if (Input.GetKeyDown(KeyCode.Space) && !lancando)
-        {
+        anguloGimbalAtual = Mathf.Clamp(anguloGimbalAtual, -anguloMaxGimbal, anguloMaxGimbal);
+
+        if (Input.GetKeyDown(KeyCode.Space))
             lancando = true;
+
+        if (Input.GetKeyDown(KeyCode.X) && !estagioSeparado)
+        {
+            massaEstrutural -= massaEstagio;
+            estagioSeparado = true;
         }
 
-        // Desenhar trajetória
+        AlinharComForca();
         DesenharTrajetoria();
     }
 
     void FixedUpdate()
     {
         if (lancando && combustivelAtual > 0f)
-        {
             AplicarEmpuxo();
-        }
+
+        AplicarArrasto();
+        AtualizarMassa();
     }
 
     void AplicarEmpuxo()
     {
-        float potencia = potenciaPercentual / 100f;
-        float forcaAtual = forcaMaxima * potencia;
+        float throttle = throttlePercentual / 100f;
+        float empuxoAlvo = potenciaMaxima * throttle;
 
-        // Direção baseada na rotação (empuxo vetorial real)
-        Vector2 direcao = transform.up;
+        empuxoAtual = Mathf.Lerp(empuxoAtual, empuxoAlvo, Time.fixedDeltaTime / tempoRespostaMotor);
 
-        rb.AddForce(direcao * forcaAtual);
+        Vector2 direcao = Quaternion.Euler(0, 0, anguloGimbalAtual) * transform.up;
 
-        // Consome combustível
-        combustivelAtual -= consumoPorSegundo * Time.fixedDeltaTime;
+        rb.AddForce(direcao * empuxoAtual);
+
+        float consumo = consumoPorSegundo * throttle * Time.fixedDeltaTime;
+        combustivelAtual -= consumo;
+
+        float massaConsumida = (consumo / combustivelMax) * massaCombustivel;
+        massaCombustivel -= massaConsumida;
+
         combustivelAtual = Mathf.Clamp(combustivelAtual, 0f, combustivelMax);
+        massaCombustivel = Mathf.Max(0f, massaCombustivel);
+    }
 
-        // Física (debug)
-        float aceleracao = forcaAtual / rb.mass;
-        velocidadeAtual += aceleracao * Time.fixedDeltaTime;
+    void AplicarArrasto()
+    {
+        Vector2 velocidade = rb.linearVelocity;
+        float v = velocidade.magnitude;
 
-        Debug.Log("Velocidade: " + velocidadeAtual.ToString("F2"));
-        Debug.Log("Combustível: " + combustivelAtual.ToString("F2"));
+        if (v < 0.01f) return;
+
+        float altitude = transform.position.y;
+        float densidadeAr = densidadeArNivelMar * Mathf.Exp(-altitude / alturaEscalaAtmosfera);
+
+        float forcaArrasto = 0.5f * densidadeAr * v * v * coeficienteArrasto * areaFrontal;
+
+        Vector2 direcao = -velocidade.normalized;
+
+        rb.AddForce(direcao * forcaArrasto);
+    }
+
+    void AtualizarMassa()
+    {
+        rb.mass = massaEstrutural + massaCombustivel;
+    }
+
+    void AlinharComForca()
+    {
+        Vector2 velocidade = rb.linearVelocity;
+
+        if (velocidade.magnitude < 0.1f) return;
+
+        float anguloAlvo = Mathf.Atan2(velocidade.y, velocidade.x) * Mathf.Rad2Deg - 90f;
+
+        float anguloAtual = transform.eulerAngles.z;
+
+        float novoAngulo = Mathf.LerpAngle(anguloAtual, anguloAlvo, Time.deltaTime * velocidadeAlinhamento);
+
+        transform.rotation = Quaternion.Euler(0, 0, novoAngulo);
     }
 
     void DesenharTrajetoria()
     {
         line.positionCount = passos;
 
-        Vector2 posicao = rb.position;
-        Vector2 velocidade = rb.linearVelocity;
+        Vector2 pos = rb.position;
+        Vector2 vel = rb.linearVelocity;
 
-        float potencia = potenciaPercentual / 100f;
-        float forca = forcaMaxima * potencia;
-
-        Vector2 aceleracaoEmpuxo = (transform.up * forca) / rb.mass;
-        Vector2 gravidade = Physics2D.gravity * rb.gravityScale;
+        float massaSimulada = rb.mass;
+        float combustivelSimulado = combustivelAtual;
+        float massaCombSimulada = massaCombustivel;
 
         for (int i = 0; i < passos; i++)
         {
-            float t = i * tempoEntrePontos;
+            float altitude = pos.y;
+            float densidadeAr = densidadeArNivelMar * Mathf.Exp(-altitude / alturaEscalaAtmosfera);
 
-            // Se ainda tem combustível, considera empuxo
-            Vector2 aceleracaoTotal = gravidade;
+            Vector2 grav = Physics2D.gravity * rb.gravityScale;
+            Vector2 accTotal = grav;
 
-            if (combustivelAtual > 0)
-                aceleracaoTotal += aceleracaoEmpuxo;
+            // 🔥 Empuxo simulado
+            if (combustivelSimulado > 0f)
+            {
+                float throttle = throttlePercentual / 100f;
+                float empuxo = potenciaMaxima * throttle;
 
-            Vector2 pos = posicao 
-                        + velocidade * t 
-                        + 0.5f * aceleracaoTotal * t * t;
+                Vector2 direcao = Quaternion.Euler(0, 0, anguloGimbalAtual) * transform.up;
+
+                accTotal += direcao * (empuxo / massaSimulada);
+
+                float consumo = consumoPorSegundo * throttle * tempoEntrePontos;
+                combustivelSimulado -= consumo;
+
+                float massaConsumida = (consumo / combustivelMax) * massaCombSimulada;
+                massaCombSimulada -= massaConsumida;
+
+                combustivelSimulado = Mathf.Max(0f, combustivelSimulado);
+                massaCombSimulada = Mathf.Max(0f, massaCombSimulada);
+            }
+
+            // Atualiza massa simulada
+            massaSimulada = massaEstrutural + massaCombSimulada;
+
+            // 🌬️ Arrasto
+            float v = vel.magnitude;
+            if (v > 0.01f)
+            {
+                float arrasto = 0.5f * densidadeAr * v * v * coeficienteArrasto * areaFrontal;
+                accTotal += -vel.normalized * (arrasto / massaSimulada);
+            }
+
+            vel += accTotal * tempoEntrePontos;
+            pos += vel * tempoEntrePontos;
 
             line.SetPosition(i, pos);
-
-            // Detectar chão
-            RaycastHit2D hit = Physics2D.Raycast(pos, Vector2.down, 0.1f);
-            if (hit.collider != null)
-            {
-                line.positionCount = i + 1;
-                break;
-            }
         }
     }
 }
