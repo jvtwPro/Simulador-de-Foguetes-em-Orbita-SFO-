@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=5">
+<title>Projeto Terminus — Simulador de Lançamento de Foguetes</title>
+<meta name="description" content="Projeto Terminus: simulador de lançamento de foguetes desenvolvido em Unity por estudantes do IFFar Uruguaiana. Parâmetros configuráveis, física gravitacional e corpos celestes reais.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #0d0d15;
+    --fg: #f0f0f0;
+    --accent: #ff4d1c;
+    --accent2: #ff8c42;
+    --muted: #555566;
+    --border: rgba(255,255,255,0.08);
+    --card: rgba(255,255,255,0.04);
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-cond: 'Barlow Condensed', sans-serif;
+    --font-body: 'Barlow', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    overflow-x: hidden;
+    cursor: crosshair;
+  }
+
+  /* LOADER */
+  #loader {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 24px;
+    transition: opacity 0.8s ease, visibility 0.8s ease;
+  }
+  #loader.hidden { opacity: 0; visibility: hidden; }
+  .loader-title {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 10vw, 120px);
+    letter-spacing: 0.08em;
+    color: var(--fg);
+    line-height: 1;
+  }
+  .loader-title span { color: var(--accent); }
+  .loader-bar-wrap {
+    width: clamp(200px, 40vw, 400px);
+    height: 2px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .loader-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.05s linear;
+    box-shadow: 0 0 12px var(--accent);
+  }
+  .loader-label {
+    font-family: var(--font-cond);
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .loader-pct {
+    font-family: var(--font-display);
+    font-size: 32px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 20px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  nav.scrolled {
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(16px);
+    border-color: var(--border);
+  }
+  .nav-logo {
+    font-family: var(--font-display);
+    font-size: 28px;
+    letter-spacing: 0.15em;
+    color: var(--fg);
+    text-decoration: none;
+  }
+  .nav-logo span { color: var(--accent); }
+  .nav-links { display: flex; gap: 36px; list-style: none; }
+  .nav-links a {
+    font-family: var(--font-cond);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--fg);
+    text-decoration: none;
+    opacity: 0.6;
+    transition: opacity 0.2s, color 0.2s;
+  }
+  .nav-links a:hover { opacity: 1; color: var(--accent); }
+  .nav-cta {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 10px 24px;
+    text-decoration: none;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .nav-cta:hover { background: var(--accent2); transform: translateY(-1px); }
+
+  /* HERO */
+  #hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 40%, rgba(255,77,28,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 80% 80%, rgba(255,140,66,0.05) 0%, transparent 60%);
+  }
+  .stars { position: absolute; inset: 0; overflow: hidden; }
+  .star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0;
+    animation: twinkle var(--d) var(--delay) infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(1); }
+    50% { opacity: var(--op); transform: scale(1.5); }
+  }
+  .hero-eyebrow {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadeUp 1s 1.2s forwards;
+  }
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(80px, 16vw, 220px);
+    line-height: 0.9;
+    text-align: center;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    position: relative;
+    opacity: 0;
+    animation: fadeUp 1s 1.4s forwards;
+  }
+  .hero-title .line2 {
+    display: block;
+    -webkit-text-stroke: 2px var(--accent);
+    color: transparent;
+  }
+  .hero-sub {
+    font-family: var(--font-cond);
+    font-size: clamp(16px, 2.5vw, 22px);
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    color: var(--fg);
+    opacity: 0;
+    margin-top: 24px;
+    text-align: center;
+    animation: fadeUp 1s 1.6s forwards;
+  }
+  .hero-actions {
+    display: flex; gap: 16px; margin-top: 48px;
+    opacity: 0;
+    animation: fadeUp 1s 1.8s forwards;
+  }
+  .btn-primary {
+    font-family: var(--font-cond);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 16px 40px;
+    text-decoration: none;
+    border: none; cursor: pointer;
+    transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 30px rgba(255,77,28,0.3);
+    display: inline-block;
+  }
+  .btn-primary:hover {
+    background: var(--accent2);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(255,77,28,0.5);
+  }
+  .btn-secondary {
+    font-family: var(--font-cond);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--fg);
+    background: transparent;
+    padding: 16px 40px;
+    text-decoration: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, transform 0.2s;
+    display: inline-block;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-2px); }
+  .hero-scroll-hint {
+    position: absolute; bottom: 40px;
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    opacity: 0;
+    animation: fadeUp 1s 2.2s forwards;
+  }
+  .scroll-line {
+    width: 1px; height: 60px;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+    animation: scrollAnim 2s 2.5s infinite;
+  }
+  @keyframes scrollAnim {
+    0% { transform: scaleY(0); transform-origin: top; opacity: 1; }
+    50% { transform: scaleY(1); transform-origin: top; opacity: 1; }
+    51% { transform-origin: bottom; }
+    100% { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
+  }
+  .rocket-svg {
+    position: absolute; right: 5%; bottom: 10%;
+    width: clamp(80px, 15vw, 200px);
+    opacity: 0.12;
+    animation: rocketFloat 6s ease-in-out infinite;
+  }
+  @keyframes rocketFloat {
+    0%, 100% { transform: translateY(0) rotate(15deg); }
+    50% { transform: translateY(-30px) rotate(15deg); }
+  }
+
+  /* MARQUEE */
+  .marquee-section {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    overflow: hidden;
+    background: rgba(255,77,28,0.04);
+  }
+  .marquee-track {
+    display: flex; gap: 60px;
+    white-space: nowrap;
+    animation: marquee 22s linear infinite;
+    width: max-content;
+  }
+  .marquee-item {
+    font-family: var(--font-cond);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .marquee-item .dot { width: 4px; height: 4px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* SECTIONS */
+  section { padding: 120px 48px; }
+  .section-eyebrow {
+    font-family: var(--font-cond);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  /* ABOUT */
+  #about {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: center;
+  }
+  .about-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 9vw, 120px);
+    line-height: 0.9;
+    letter-spacing: 0.02em;
+  }
+  .about-title em {
+    font-style: normal;
+    -webkit-text-stroke: 1px var(--accent);
+    color: transparent;
+  }
+  .about-body {
+    font-size: 17px;
+    line-height: 1.75;
+    font-weight: 300;
+    color: rgba(240,240,240,0.75);
+    margin-top: 24px;
+  }
+  .about-body strong { color: var(--fg); font-weight: 500; }
+  .about-stats {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 32px; margin-top: 48px;
+  }
+  .stat-num {
+    font-family: var(--font-display);
+    font-size: clamp(40px, 6vw, 72px);
+    color: var(--accent);
+    line-height: 1;
+  }
+  .stat-label {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .about-visual { position: relative; height: 500px; }
+  .about-card {
+    position: absolute;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 32px;
+  }
+  .about-card.c1 { top: 0; left: 0; right: 60px; bottom: 80px; }
+  .about-card.c2 { bottom: 0; right: 0; left: 80px; top: 60%; background: rgba(255,77,28,0.06); border-color: rgba(255,77,28,0.25); }
+  .card-label {
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .card-big {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 6vw, 80px);
+    line-height: 1;
+    color: var(--fg);
+  }
+  .card-sub {
+    font-family: var(--font-cond);
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+
+  /* FEATURES */
+  #features { background: var(--bg2); }
+  .features-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 80px;
+  }
+  .features-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 9vw, 120px);
+    line-height: 0.9;
+  }
+  .features-title span { display: block; -webkit-text-stroke: 2px var(--accent); color: transparent; }
+  .features-desc {
+    max-width: 360px;
+    font-size: 16px;
+    line-height: 1.7;
+    font-weight: 300;
+    color: rgba(240,240,240,0.6);
+    margin-bottom: 8px;
+  }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+  .feature-card {
+    background: var(--bg2);
+    padding: 48px 40px;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.3s;
+    cursor: default;
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+  }
+  .feature-card:hover { background: rgba(255,77,28,0.04); }
+  .feature-card:hover::before { transform: scaleX(1); }
+  .feature-num {
+    font-family: var(--font-display);
+    font-size: 80px;
+    color: rgba(255,77,28,0.08);
+    line-height: 1;
+    margin-bottom: 24px;
+    transition: color 0.3s;
+  }
+  .feature-card:hover .feature-num { color: rgba(255,77,28,0.18); }
+  .feature-title {
+    font-family: var(--font-cond);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .feature-body {
+    font-size: 15px;
+    line-height: 1.65;
+    font-weight: 300;
+    color: rgba(240,240,240,0.6);
+  }
+  .feature-icon {
+    width: 40px; height: 40px;
+    margin-bottom: 24px;
+    color: var(--accent);
+  }
+
+  /* SIMULATOR */
+  #simulator {}
+  .sim-head { margin-bottom: 80px; }
+  .sim-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 9vw, 120px);
+    line-height: 0.9;
+  }
+  .sim-intro {
+    max-width: 700px;
+    font-size: 17px;
+    line-height: 1.75;
+    font-weight: 300;
+    color: rgba(240,240,240,0.7);
+    margin-top: 24px;
+  }
+  .sim-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--border);
+    margin-top: 60px;
+  }
+  .sim-panel {
+    background: var(--bg);
+    padding: 48px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .sim-panel.highlight { background: rgba(255,77,28,0.04); }
+  .sim-panel-tag {
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .sim-panel-title {
+    font-family: var(--font-cond);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .sim-panel-body {
+    font-size: 15px;
+    line-height: 1.7;
+    font-weight: 300;
+    color: rgba(240,240,240,0.6);
+  }
+  .sim-params {
+    margin-top: 28px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .sim-param {
+    display: flex; align-items: center; gap: 12px;
+    font-family: var(--font-cond);
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    color: rgba(240,240,240,0.5);
+  }
+  .sim-param::before {
+    content: '';
+    width: 6px; height: 1px;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .bodies-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 28px;
+  }
+  .body-card {
+    border: 1px solid var(--border);
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .body-card:hover { border-color: rgba(255,77,28,0.4); }
+  .body-name {
+    font-family: var(--font-display);
+    font-size: 28px;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  .body-data {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    margin-top: 6px;
+    text-transform: uppercase;
+    line-height: 1.6;
+  }
+
+  /* METHODOLOGY */
+  #methodology { background: var(--bg2); }
+  .method-head { margin-bottom: 80px; }
+  .method-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 9vw, 120px);
+    line-height: 0.9;
+  }
+  .method-title span { display: block; -webkit-text-stroke: 2px var(--accent); color: transparent; }
+  .method-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: start;
+  }
+  .method-body {
+    font-size: 17px;
+    line-height: 1.8;
+    font-weight: 300;
+    color: rgba(240,240,240,0.7);
+  }
+  .method-body p + p { margin-top: 20px; }
+  .method-body strong { color: var(--fg); font-weight: 500; }
+  .method-phases { display: flex; flex-direction: column; gap: 2px; }
+  .method-phase {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 32px 36px;
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 24px;
+    align-items: start;
+    transition: background 0.2s;
+  }
+  .method-phase:hover { background: rgba(255,77,28,0.03); }
+  .phase-num {
+    font-family: var(--font-display);
+    font-size: 40px;
+    color: rgba(255,77,28,0.3);
+    line-height: 1;
+  }
+  .phase-name {
+    font-family: var(--font-cond);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .phase-desc {
+    font-size: 14px;
+    line-height: 1.65;
+    font-weight: 300;
+    color: rgba(240,240,240,0.55);
+  }
+
+  /* TEAM */
+  #team {}
+  .team-head { margin-bottom: 80px; }
+  .team-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 9vw, 120px);
+    line-height: 0.9;
+  }
+  .team-sub {
+    font-family: var(--font-cond);
+    font-size: 16px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 16px;
+  }
+  .team-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--border);
+  }
+  .team-card {
+    background: var(--bg);
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    transition: background 0.3s;
+  }
+  .team-card:hover { background: rgba(255,77,28,0.03); }
+  .team-photo {
+    width: 100%;
+    height: 340px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .team-photo-placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .photo-icon {
+    width: 80px; height: 80px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .photo-icon svg { width: 36px; height: 36px; color: var(--muted); }
+  .photo-label {
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  /* slot para imagem real */
+  .team-photo img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: center top;
+    display: block;
+  }
+  .team-info { padding: 40px; }
+  .team-name {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 4vw, 48px);
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .team-role {
+    font-family: var(--font-cond);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .team-inst {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .team-bio {
+    font-size: 15px;
+    line-height: 1.7;
+    font-weight: 300;
+    color: rgba(240,240,240,0.6);
+  }
+
+  /* QUOTE */
+  #quote {
+    padding: 160px 48px;
+    position: relative; overflow: hidden;
+  }
+  .quote-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
+  .quote-mark {
+    font-family: var(--font-display);
+    font-size: 200px;
+    color: rgba(255,77,28,0.06);
+    line-height: 0.7;
+    display: block;
+    margin-bottom: -60px;
+  }
+  .quote-text {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 4.5vw, 64px);
+    line-height: 1.08;
+    letter-spacing: 0.02em;
+  }
+  .quote-text em { font-style: normal; color: var(--accent); }
+  .quote-attr {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 40px;
+  }
+
+  /* TECH STACK */
+  #tech { background: var(--bg2); }
+  .tech-title {
+    font-family: var(--font-display);
+    font-size: clamp(50px, 7vw, 100px);
+    line-height: 0.9;
+    margin-bottom: 80px;
+  }
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+  .tech-item {
+    background: var(--bg2);
+    padding: 40px 32px;
+    text-align: center;
+    transition: background 0.2s;
+  }
+  .tech-item:hover { background: rgba(255,77,28,0.05); }
+  .tech-icon-svg { width: 36px; height: 36px; margin: 0 auto; color: var(--accent); }
+  .tech-name {
+    font-family: var(--font-cond);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 16px;
+  }
+  .tech-role {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* INSTALL */
+  #install {
+    background:
+      radial-gradient(ellipse 70% 80% at 50% 50%, rgba(255,77,28,0.06) 0%, transparent 70%),
+      var(--bg2);
+    text-align: center;
+  }
+  .install-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 12vw, 180px);
+    line-height: 0.85;
+    letter-spacing: 0.02em;
+    margin-bottom: 32px;
+  }
+  .install-title span { display: block; -webkit-text-stroke: 2px var(--accent); color: transparent; }
+  .install-sub {
+    font-family: var(--font-cond);
+    font-size: 18px;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    color: rgba(240,240,240,0.6);
+    max-width: 560px;
+    margin: 0 auto 48px;
+    line-height: 1.6;
+  }
+  .install-steps {
+    display: flex; gap: 0;
+    max-width: 900px; margin: 80px auto 0;
+    position: relative;
+  }
+  .install-steps::before {
+    content: '';
+    position: absolute; top: 28px; left: 10%; right: 10%;
+    height: 1px; background: var(--border);
+    z-index: 0;
+  }
+  .install-step { flex: 1; text-align: center; position: relative; z-index: 1; }
+  .step-num {
+    width: 56px; height: 56px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--accent);
+    margin: 0 auto 24px;
+    transition: background 0.3s, border-color 0.3s, color 0.3s;
+  }
+  .install-step:hover .step-num { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .step-label {
+    font-family: var(--font-cond);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .step-desc {
+    font-size: 13px;
+    line-height: 1.6;
+    color: rgba(240,240,240,0.5);
+    font-weight: 300;
+  }
+  .download-meta {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .progress-demo {
+    width: 100%; max-width: 480px;
+    margin: 32px auto 0;
+  }
+  .progress-label {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .progress-track { height: 2px; background: var(--border); overflow: hidden; }
+  .progress-fill {
+    height: 100%; background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: progressAnim 3s ease-in-out infinite alternate;
+  }
+  @keyframes progressAnim {
+    from { width: 10%; }
+    to { width: 95%; }
+  }
+
+  /* UPDATES */
+  #updates {}
+  .updates-head { margin-bottom: 64px; }
+  .updates-title {
+    font-family: var(--font-display);
+    font-size: clamp(50px, 7vw, 100px);
+    line-height: 0.9;
+  }
+  .updates-list { border-top: 1px solid var(--border); }
+  .update-item {
+    border-bottom: 1px solid var(--border);
+    padding: 36px 0;
+    display: grid;
+    grid-template-columns: 120px 80px 1fr auto;
+    gap: 40px;
+    align-items: center;
+    transition: background 0.2s, padding 0.2s;
+    cursor: default;
+  }
+  .update-item:hover { background: rgba(255,255,255,0.02); padding-left: 16px; padding-right: 16px; margin: 0 -16px; }
+  .update-date {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .update-ver {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .update-title-text {
+    font-family: var(--font-cond);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .update-desc {
+    font-size: 14px;
+    color: rgba(240,240,240,0.5);
+    margin-top: 4px;
+    font-weight: 300;
+  }
+  .update-tag {
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border: 1px solid;
+  }
+  .tag-new { border-color: var(--accent); color: var(--accent); }
+  .tag-fix { border-color: #4da8ff; color: #4da8ff; }
+  .tag-perf { border-color: #4dff8c; color: #4dff8c; }
+
+  /* FOOTER */
+  footer {
+    padding: 80px 48px 40px;
+    border-top: 1px solid var(--border);
+    position: relative; overflow: hidden;
+  }
+  .footer-top {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 80px; margin-bottom: 80px;
+  }
+  .footer-brand-name {
+    font-family: var(--font-display);
+    font-size: 64px;
+    line-height: 0.9;
+    letter-spacing: 0.05em;
+    margin-bottom: 24px;
+  }
+  .footer-brand-name span { color: var(--accent); }
+  .footer-tagline {
+    font-size: 15px;
+    line-height: 1.7;
+    font-weight: 300;
+    color: rgba(240,240,240,0.5);
+    max-width: 300px;
+  }
+  .footer-col-title {
+    font-family: var(--font-cond);
+    font-size: 11px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .footer-links { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .footer-links a {
+    font-family: var(--font-cond);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(240,240,240,0.7);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--accent); }
+  .footer-bottom {
+    border-top: 1px solid var(--border);
+    padding-top: 40px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .footer-copy {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .footer-socials { display: flex; gap: 24px; }
+  .footer-socials a {
+    font-family: var(--font-cond);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-socials a:hover { color: var(--accent); }
+  .footer-bg-text {
+    position: absolute; bottom: -20px; left: -20px;
+    font-family: var(--font-display);
+    font-size: clamp(100px, 20vw, 280px);
+    color: rgba(255,255,255,0.02);
+    line-height: 1;
+    pointer-events: none; user-select: none;
+    white-space: nowrap;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .reveal {
+    opacity: 0; transform: translateY(40px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* RESPONSIVE */
+  @media (max-width: 1024px) {
+    #about, .method-grid { grid-template-columns: 1fr; gap: 48px; }
+    .about-visual { height: 280px; }
+    .features-grid { grid-template-columns: 1fr 1fr; }
+    .sim-grid { grid-template-columns: 1fr; }
+    .tech-grid { grid-template-columns: repeat(3, 1fr); }
+    .team-grid { grid-template-columns: 1fr; }
+    .footer-top { grid-template-columns: 1fr 1fr; gap: 48px; }
+    .update-item { grid-template-columns: 1fr 1fr; gap: 16px; }
+    .features-head { flex-direction: column; align-items: flex-start; gap: 24px; }
+  }
+  @media (max-width: 768px) {
+    nav { padding: 16px 24px; }
+    .nav-links { display: none; }
+    section { padding: 80px 24px; }
+    .features-grid, .tech-grid { grid-template-columns: 1fr; }
+    .install-steps { flex-direction: column; gap: 40px; }
+    .install-steps::before { display: none; }
+    .footer-top { grid-template-columns: 1fr; }
+    footer { padding: 60px 24px 32px; }
+    .footer-bottom { flex-direction: column; gap: 16px; }
+    .update-item { grid-template-columns: 1fr; gap: 8px; }
+    .bodies-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-title">PROJETO <span>TERMINUS</span></div>
+  <div class="loader-label" id="loader-label">inicializando sistema de simulação</div>
+  <div class="loader-bar-wrap"><div class="loader-bar" id="lbar"></div></div>
+  <div class="loader-pct" id="lpct">0%</div>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="#" class="nav-logo">TERMINUS<span>.</span></a>
+  <ul class="nav-links">
+    <li><a href="#about">Sobre</a></li>
+    <li><a href="#features">Recursos</a></li>
+    <li><a href="#simulator">Simulador</a></li>
+    <li><a href="#methodology">Metodologia</a></li>
+    <li><a href="#team">Equipe</a></li>
+    <li><a href="#install">Instalar</a></li>
+  </ul>
+  <a href="#install" class="nav-cta">Download</a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="stars" id="stars"></div>
+
+  <div class="hero-eyebrow">Simulador de Lançamento de Foguetes · Unity Engine · IFFar Uruguaiana</div>
+  <h1 class="hero-title">
+    PROJETO
+    <span class="line2">TERMINUS</span>
+  </h1>
+  <p class="hero-sub">Simulação física de trajetórias orbitais Terra–Lua com parâmetros configuráveis pelo usuário.</p>
+  <div class="hero-actions">
+    <a href="#install" class="btn-primary">Baixar Agora</a>
+    <a href="#about" class="btn-secondary">Saiba Mais</a>
+  </div>
+
+  <div class="hero-scroll-hint">
+    <span>scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+
+  <svg class="rocket-svg" viewBox="0 0 120 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M60 10 C60 10 30 50 30 110 L60 130 L90 110 C90 50 60 10 60 10Z" fill="white"/>
+    <path d="M30 110 L10 150 L40 135Z" fill="rgba(255,77,28,0.8)"/>
+    <path d="M90 110 L110 150 L80 135Z" fill="rgba(255,77,28,0.8)"/>
+    <circle cx="60" cy="70" r="10" stroke="rgba(255,140,66,0.6)" stroke-width="1.5" fill="none"/>
+    <ellipse cx="60" cy="155" rx="14" ry="26" fill="rgba(255,100,30,0.4)"/>
+    <ellipse cx="60" cy="168" rx="9" ry="18" fill="rgba(255,200,50,0.5)"/>
+  </svg>
+</section>
+
+<!-- MARQUEE -->
+<div class="marquee-section">
+  <div class="marquee-track" id="mtrack"></div>
+</div>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-left reveal">
+    <div class="section-eyebrow">O Projeto</div>
+    <h2 class="about-title">SIMULAÇÃO<br><em>REAL</em></h2>
+    <p class="about-body">
+      <strong>Projeto Terminus</strong> é um simulador de lançamento de foguetes desenvolvido em Unity como projeto acadêmico no Instituto Federal Farroupilha — campus Uruguaiana.<br><br>
+      O simulador aplica as leis reais da dinâmica orbital — segunda lei de Newton, equações de Kepler e cálculo de delta-v — para modelar trajetórias entre a Terra e a Lua com fidelidade física. O usuário define os parâmetros da missão e observa o comportamento do veículo em tempo real.
+    </p>
+    <div class="about-stats">
+      <div class="stat-item">
+        <div class="stat-num">2</div>
+        <div class="stat-label">Corpos Celestes</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">384k</div>
+        <div class="stat-label">km Terra–Lua</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">Unity</div>
+        <div class="stat-label">Engine Principal</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">IFFar</div>
+        <div class="stat-label">Uruguaiana</div>
+      </div>
+    </div>
+  </div>
+  <div class="about-visual reveal">
+    <div class="about-card c1">
+      <div class="card-label">Distância simulada</div>
+      <div class="card-big">384.400<br>KM</div>
+      <div class="card-sub">Distância média Terra–Lua</div>
+    </div>
+    <div class="about-card c2">
+      <div class="card-label">Gravidade superficial — Terra</div>
+      <div class="card-big">9,8 m/s²</div>
+      <div class="card-sub">Calculada em tempo real</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="features-head reveal">
+    <div>
+      <div class="section-eyebrow">Funcionalidades</div>
+      <h2 class="features-title">MOTOR<br><span>FÍSICO</span></h2>
+    </div>
+    <p class="features-desc">Cada módulo do simulador foi construído sobre fundamentos científicos reais, do cálculo gravitacional à renderização da trajetória orbital.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <div class="feature-num">01</div>
+      <svg class="feature-icon" viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M20 4v4M20 32v4M4 20h4M32 20h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="0.5" stroke-dasharray="3 4"/></svg>
+      <div class="feature-title">Física Gravitacional</div>
+      <div class="feature-body">Cálculo da força gravitacional entre foguete e corpo celeste em cada frame, com variação contínua de aceleração conforme a altitude. Baseado na Lei da Gravitação Universal de Newton.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay:0.1s">
+      <div class="feature-num">02</div>
+      <svg class="feature-icon" viewBox="0 0 40 40" fill="none"><path d="M8 32 L20 8 L32 32" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 24 L28 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <div class="feature-title">Parâmetros Configuráveis</div>
+      <div class="feature-body">O usuário define massa do foguete, empuxo do motor, quantidade de combustível e ângulo de lançamento. Predefinições de veículos reais como Saturn V e Falcon 9 estão disponíveis para referência.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay:0.2s">
+      <div class="feature-num">03</div>
+      <svg class="feature-icon" viewBox="0 0 40 40" fill="none"><path d="M4 28l10-12 8 8 6-8 8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="4" width="32" height="32" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>
+      <div class="feature-title">Telemetria em Tempo Real</div>
+      <div class="feature-body">Painel com altitude, velocidade, aceleração, massa atual e consumo de propelente atualizado quadro a quadro durante toda a simulação. Visualização da trajetória descrita no espaço.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay:0.3s">
+      <div class="feature-num">04</div>
+      <svg class="feature-icon" viewBox="0 0 40 40" fill="none"><circle cx="12" cy="28" r="6" stroke="currentColor" stroke-width="1.5"/><circle cx="32" cy="12" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M17 25 L27 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 3"/></svg>
+      <div class="feature-title">Corpos Celestes Reais</div>
+      <div class="feature-body">Terra e Lua modelados com massa, raio, aceleração gravitacional e velocidade de escape baseados em dados da NASA. Escalas ajustáveis para visualização didática.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay:0.4s">
+      <div class="feature-num">05</div>
+      <svg class="feature-icon" viewBox="0 0 40 40" fill="none"><rect x="6" y="6" width="28" height="28" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 16h28M16 16v22" stroke="currentColor" stroke-width="1.5"/></svg>
+      <div class="feature-title">Predefinições de Veículos</div>
+      <div class="feature-body">Banco de dados com especificações técnicas de foguetes históricos e modernos. Carregue um perfil e observe como as diferenças de empuxo e massa afetam a trajetória calculada.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay:0.5s">
+      <div class="feature-num">06</div>
+      <svg class="feature-icon" viewBox="0 0 40 40" fill="none"><path d="M20 6 L20 34M6 20 L34 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="20" cy="20" r="14" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 3"/></svg>
+      <div class="feature-title">Visualização da Órbita</div>
+      <div class="feature-body">Renderização gráfica da trajetória descrita pelo veículo, com indicação do apogeu, perigeu e, quando aplicável, da janela de inserção orbital ao redor da Lua.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMULATOR -->
+<section id="simulator">
+  <div class="sim-head reveal">
+    <div class="section-eyebrow">Como Funciona</div>
+    <h2 class="sim-title">O SIMULADOR</h2>
+    <p class="sim-intro">
+      Ao contrário de jogos com missões roteirizadas, o Projeto Terminus é uma ferramenta de simulação livre. Você define os parâmetros do veículo e do ambiente, e o motor físico calcula o resultado.
+    </p>
+  </div>
+  <div class="sim-grid">
+    <div class="sim-panel reveal">
+      <div class="sim-panel-tag">Configuração do Veículo</div>
+      <div class="sim-panel-title">Parâmetros do Foguete</div>
+      <div class="sim-panel-body">
+        Defina as propriedades físicas do veículo antes do lançamento. Todos os parâmetros afetam diretamente o comportamento simulado, calculado quadro a quadro pelo motor de física do Unity.
+      </div>
+      <div class="sim-params">
+        <div class="sim-param">Massa estrutural e massa de propelente (kg)</div>
+        <div class="sim-param">Empuxo do motor principal (kN)</div>
+        <div class="sim-param">Impulso específico do propelente (s)</div>
+        <div class="sim-param">Angulo de lançamento em relação à vertical</div>
+        <div class="sim-param">Tempo de queima por estágio</div>
+      </div>
+    </div>
+    <div class="sim-panel highlight reveal" style="transition-delay:0.1s">
+      <div class="sim-panel-tag">Predefinicoes Disponíveis</div>
+      <div class="sim-panel-title">Veículos de Referência</div>
+      <div class="sim-panel-body">
+        Carregue especificações baseadas em veículos lançadores reais para comparar trajetórias e entender como cada variável influencia o resultado da missão.
+      </div>
+      <div class="sim-params">
+        <div class="sim-param">Saturn V — Apollo Program (NASA, 1967)</div>
+        <div class="sim-param">Falcon 9 Block 5 — SpaceX</div>
+        <div class="sim-param">Ariane 5 — ESA</div>
+        <div class="sim-param">Veículo personalizado — parâmetros livres</div>
+      </div>
+    </div>
+    <div class="sim-panel reveal" style="transition-delay:0.2s">
+      <div class="sim-panel-tag">Corpos Celestes</div>
+      <div class="sim-panel-title">Ambiente Simulado</div>
+      <div class="sim-panel-body">
+        A simulação opera com dois corpos celestes modelados a partir de dados físicos reais. É possível ajustar parâmetros para fins didáticos ou explorar cenários hipotéticos.
+      </div>
+      <div class="bodies-grid">
+        <div class="body-card">
+          <div class="body-name">TERRA</div>
+          <div class="body-data">
+            Massa: 5.972 × 10²⁴ kg<br>
+            Raio: 6.371 km<br>
+            g: 9,807 m/s²<br>
+            V. escape: 11,2 km/s
+          </div>
+        </div>
+        <div class="body-card">
+          <div class="body-name">LUA</div>
+          <div class="body-data">
+            Massa: 7.342 × 10²² kg<br>
+            Raio: 1.737 km<br>
+            g: 1,62 m/s²<br>
+            V. escape: 2,38 km/s
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sim-panel highlight reveal" style="transition-delay:0.3s">
+      <div class="sim-panel-tag">Resultado da Simulacao</div>
+      <div class="sim-panel-title">O que é Calculado</div>
+      <div class="sim-panel-body">
+        Com os parâmetros definidos, o motor físico integra as equações de movimento numericamente e exibe os resultados em tempo real no painel de telemetria.
+      </div>
+      <div class="sim-params">
+        <div class="sim-param">Trajetória descrita no espaço (posição × tempo)</div>
+        <div class="sim-param">Velocidade instantânea e variação de delta-v</div>
+        <div class="sim-param">Consumo de propelente por fase</div>
+        <div class="sim-param">Alcance máximo e altitude de apogeu</div>
+        <div class="sim-param">Indicação de inserção orbital bem-sucedida</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTE -->
+<section id="quote">
+  <div class="quote-inner reveal">
+    <span class="quote-mark">"</span>
+    <p class="quote-text">O universo não foi feito à medida do ser humano, mas tampouco lhe é <em>adverso</em>: é-lhe <em>indiferente</em>.</p>
+    <div class="quote-attr">— Carl Sagan</div>
+  </div>
+</section>
+
+<!-- METHODOLOGY -->
+<section id="methodology">
+  <div class="method-head reveal">
+    <div class="section-eyebrow">Desenvolvimento</div>
+    <h2 class="method-title">METODOLOGIA<br><span>DE CRIAÇÃO</span></h2>
+  </div>
+  <div class="method-grid">
+    <div class="method-body reveal">
+      <p>
+        O Projeto Terminus nasceu como trabalho de conclusão de disciplina no curso técnico do <strong>Instituto Federal Farroupilha — campus Uruguaiana</strong>. O objetivo central era unir conceitos de física aplicada com desenvolvimento de software, resultando em uma ferramenta que torna tangível a dinâmica de lançamentos espaciais.
+      </p>
+      <p>
+        A metodologia adotada partiu do levantamento bibliográfico das equações fundamentais da dinâmica orbital — lei da gravitação universal, equação de Tsiolkovsky para variação de velocidade e modelo de dois corpos — antes de qualquer linha de código ser escrita.
+      </p>
+      <p>
+        A implementação foi dividida em ciclos iterativos: cada módulo do simulador passou por validação numérica comparando os resultados do motor com dados de missões históricas documentadas, garantindo que o comportamento simulado correspondesse à realidade física dentro de margens de tolerância aceitáveis.
+      </p>
+      <p>
+        O <strong>Unity</strong> foi escolhido pela capacidade de integrar física em tempo real com renderização 3D, permitindo que a trajetória calculada seja visualizada graficamente enquanto os parâmetros são ajustados.
+      </p>
+    </div>
+    <div class="method-phases reveal" style="transition-delay:0.15s">
+      <div class="method-phase">
+        <div class="phase-num">01</div>
+        <div>
+          <div class="phase-name">Pesquisa e Fundamentação</div>
+          <div class="phase-desc">Levantamento das equações de dinâmica orbital, estudo de missões Apollo e revisão de parâmetros físicos reais da Terra e da Lua a partir de fontes da NASA.</div>
+        </div>
+      </div>
+      <div class="method-phase">
+        <div class="phase-num">02</div>
+        <div>
+          <div class="phase-name">Modelagem Matemática</div>
+          <div class="phase-desc">Formulação do sistema de equações diferenciais que governa o movimento do veículo sob influência gravitacional variável, com integração numérica por método de Euler.</div>
+        </div>
+      </div>
+      <div class="method-phase">
+        <div class="phase-num">03</div>
+        <div>
+          <div class="phase-name">Implementação em Unity</div>
+          <div class="phase-desc">Desenvolvimento dos sistemas de simulação em C#: motor físico, controlador de parâmetros, renderizador de trajetória e painel de telemetria em tempo real.</div>
+        </div>
+      </div>
+      <div class="method-phase">
+        <div class="phase-num">04</div>
+        <div>
+          <div class="phase-name">Validação e Ajuste</div>
+          <div class="phase-desc">Comparação dos resultados simulados com dados históricos das missões Apollo 11 e 17. Ajuste das constantes e tolerâncias para garantir fidelidade física adequada.</div>
+        </div>
+      </div>
+      <div class="method-phase">
+        <div class="phase-num">05</div>
+        <div>
+          <div class="phase-name">Interface e Usabilidade</div>
+          <div class="phase-desc">Desenvolvimento da interface de configuração de parâmetros, sistema de predefinições de veículos e visualização gráfica da trajetória orbital calculada.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TEAM -->
+<section id="team">
+  <div class="team-head reveal">
+    <div class="section-eyebrow">Criadores</div>
+    <h2 class="team-title">A EQUIPE</h2>
+    <div class="team-sub">Instituto Federal Farroupilha — Campus Uruguaiana</div>
+  </div>
+  <div class="team-grid">
+    <div class="team-card reveal">
+      <div class="team-photo">
+        <!-- Substitua o bloco abaixo pela tag <img src="foto-joao.jpg" alt="João Vitor"> para adicionar foto real -->
+        <div class="team-photo-placeholder">
+          <div class="photo-icon">
+            <svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="18" cy="14" r="6"/><path d="M6 32c0-6.627 5.373-12 12-12s12 5.373 12 12"/></svg>
+          </div>
+          <div class="photo-label">Foto — em breve</div>
+        </div>
+      </div>
+      <div class="team-info">
+        <div class="team-name">JOÃO VITOR<br>TRINDADE WULFF</div>
+        <div class="team-role">Desenvolvedor</div>
+        <div class="team-inst">IFFar — Uruguaiana · Estudante</div>
+        <div class="team-bio">Responsável pelo desenvolvimento da interface de usuário, sistema de predefinições de veículos e visualização gráfica da trajetória orbital. Contribuiu também na pesquisa de parâmetros físicos e na validação dos resultados simulados.</div>
+      </div>
+    </div>
+    <div class="team-card reveal" style="transition-delay:0.15s">
+      <div class="team-photo">
+        <!-- Substitua o bloco abaixo pela tag <img src="foto-daniel.jpg" alt="Daniel Raiter"> para adicionar foto real -->
+        <div class="team-photo-placeholder">
+          <div class="photo-icon">
+            <svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="18" cy="14" r="6"/><path d="M6 32c0-6.627 5.373-12 12-12s12 5.373 12 12"/></svg>
+          </div>
+          <div class="photo-label">Foto — em breve</div>
+        </div>
+      </div>
+      <div class="team-info">
+        <div class="team-name">DANIEL RAITER<br>SCREMIN GUERRA</div>
+        <div class="team-role">Desenvolvedor</div>
+        <div class="team-inst">IFFar — Uruguaiana · Estudante</div>
+        <div class="team-bio">Responsável pela implementação do motor físico, sistema de cálculo gravitacional e integração numérica das equações de movimento. Coordenou o desenvolvimento técnico do projeto, do backend de simulação à arquitetura do sistema em Unity.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TECH STACK -->
+<section id="tech">
+  <div class="reveal">
+    <div class="section-eyebrow">Tecnologia</div>
+    <h2 class="tech-title">CONSTRUÍDO<br>COM RIGOR</h2>
+  </div>
+  <div class="tech-grid">
+    <div class="tech-item reveal">
+      <svg class="tech-icon-svg" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="4" width="28" height="28" rx="2"/><path d="M12 18h12M18 12v12"/></svg>
+      <div class="tech-name">Unity</div>
+      <div class="tech-role">Engine Principal</div>
+    </div>
+    <div class="tech-item reveal" style="transition-delay:0.05s">
+      <svg class="tech-icon-svg" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M10 26 L18 6 L26 26"/><path d="M13 20 L23 20"/></svg>
+      <div class="tech-name">C#</div>
+      <div class="tech-role">Linguagem de Programação</div>
+    </div>
+    <div class="tech-item reveal" style="transition-delay:0.1s">
+      <svg class="tech-icon-svg" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="18" cy="18" r="12"/><path d="M18 6 C10 12 10 24 18 30 C26 24 26 12 18 6Z"/><path d="M6 18 L30 18"/></svg>
+      <div class="tech-name">Física N</div>
+      <div class="tech-role">Lei de Newton</div>
+    </div>
+    <div class="tech-item reveal" style="transition-delay:0.15s">
+      <svg class="tech-icon-svg" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 28 L10 16 L18 22 L24 10 L32 20"/><path d="M4 28 L32 28"/></svg>
+      <div class="tech-name">Euler</div>
+      <div class="tech-role">Integração Numérica</div>
+    </div>
+    <div class="tech-item reveal" style="transition-delay:0.2s">
+      <svg class="tech-icon-svg" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="8" width="28" height="20" rx="2"/><path d="M4 14 L32 14M10 20 L20 20"/></svg>
+      <div class="tech-name">HDRP</div>
+      <div class="tech-role">Pipeline de Renderização</div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="section-eyebrow">Instalação</div>
+  <h2 class="install-title reveal">INICIAR<br><span>SIMULAÇÃO</span></h2>
+  <p class="install-sub reveal">Disponível para Windows. Sem dependências externas. Basta baixar, instalar e configurar os parâmetros do primeiro lançamento.</p>
+  <div class="reveal">
+    <a href="#" class="btn-primary" style="font-size:16px;padding:20px 56px;">
+      Download — Projeto Terminus
+    </a>
+    <div class="download-meta" style="margin-top:16px">Windows · Build de Desenvolvimento</div>
+  </div>
+  <div class="progress-demo reveal">
+    <div class="progress-label"><span>Carregando Simulador</span><span>— %</span></div>
+    <div class="progress-track"><div class="progress-fill"></div></div>
+  </div>
+  <div class="install-steps">
+    <div class="install-step reveal">
+      <div class="step-num">1</div>
+      <div class="step-label">Download</div>
+      <div class="step-desc">Baixe o arquivo de instalação para Windows</div>
+    </div>
+    <div class="install-step reveal" style="transition-delay:0.1s">
+      <div class="step-num">2</div>
+      <div class="step-label">Instale</div>
+      <div class="step-desc">Execute o instalador e siga as instruções</div>
+    </div>
+    <div class="install-step reveal" style="transition-delay:0.2s">
+      <div class="step-num">3</div>
+      <div class="step-label">Configure</div>
+      <div class="step-desc">Defina os parâmetros do veículo e do ambiente</div>
+    </div>
+    <div class="install-step reveal" style="transition-delay:0.3s">
+      <div class="step-num">4</div>
+      <div class="step-label">Execute</div>
+      <div class="step-desc">Inicie a simulação e acompanhe a telemetria</div>
+    </div>
+  </div>
+</section>
+
+<!-- UPDATES -->
+<section id="updates" style="background:var(--bg2)">
+  <div class="updates-head reveal">
+    <div class="section-eyebrow">Histórico de Versões</div>
+    <h2 class="updates-title">REGISTRO DE<br>DESENVOLVIMENTO</h2>
+  </div>
+  <div class="updates-list">
+    <div class="update-item reveal">
+      <div class="update-date">Jun 2026</div>
+      <div class="update-ver">v1.2.0</div>
+      <div>
+        <div class="update-title-text">Predefinições de Veículos</div>
+        <div class="update-desc">Adicionado banco de dados com perfis do Saturn V, Falcon 9 e Ariane 5. Parâmetros carregáveis diretamente na interface de configuração.</div>
+      </div>
+      <div class="update-tag tag-new">NOVO</div>
+    </div>
+    <div class="update-item reveal">
+      <div class="update-date">Mai 2026</div>
+      <div class="update-ver">v1.1.1</div>
+      <div>
+        <div class="update-title-text">Correção no Cálculo de Delta-V</div>
+        <div class="update-desc">Corrigida divergência numérica na equação de Tsiolkovsky para razões de massa inferiores a 1.1. Resultados agora consistentes com dados de referência.</div>
+      </div>
+      <div class="update-tag tag-fix">FIX</div>
+    </div>
+    <div class="update-item reveal">
+      <div class="update-date">Abr 2026</div>
+      <div class="update-ver">v1.1.0</div>
+      <div>
+        <div class="update-title-text">Painel de Telemetria</div>
+        <div class="update-desc">Implementação do painel com leitura em tempo real de altitude, velocidade, aceleração e massa de propelente restante durante a simulação.</div>
+      </div>
+      <div class="update-tag tag-new">NOVO</div>
+    </div>
+    <div class="update-item reveal">
+      <div class="update-date">Mar 2026</div>
+      <div class="update-ver">v1.0.0</div>
+      <div>
+        <div class="update-title-text">Versão Inicial — Motor Físico</div>
+        <div class="update-desc">Primeira versão funcional com motor gravitacional, integração de Euler, renderização de trajetória e configuração básica de parâmetros do foguete.</div>
+      </div>
+      <div class="update-tag tag-new">LANÇAMENTO</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-bg-text">TERMINUS</div>
+  <div class="footer-top">
+    <div>
+      <div class="footer-brand-name">PROJETO<br><span>TERMINUS</span></div>
+      <div class="footer-tagline">Simulador de lançamento de foguetes desenvolvido no Instituto Federal Farroupilha — campus Uruguaiana. Física real, parâmetros configuráveis, corpos celestes baseados em dados da NASA.</div>
+    </div>
+    <div>
+      <div class="footer-col-title">Navegação</div>
+      <ul class="footer-links">
+        <li><a href="#about">Sobre</a></li>
+        <li><a href="#features">Recursos</a></li>
+        <li><a href="#simulator">Simulador</a></li>
+        <li><a href="#methodology">Metodologia</a></li>
+        <li><a href="#team">Equipe</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="footer-col-title">Projeto</div>
+      <ul class="footer-links">
+        <li><a href="#install">Download</a></li>
+        <li><a href="#updates">Changelog</a></li>
+        <li><a href="#">Documentação</a></li>
+        <li><a href="#">GitHub</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="footer-col-title">Instituição</div>
+      <ul class="footer-links">
+        <li><a href="#">IFFar Uruguaiana</a></li>
+        <li><a href="#">Curso Técnico</a></li>
+        <li><a href="#">Contato</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© 2026 Projeto Terminus · João Vitor Trindade Wulff & Daniel Raiter Scremin Guerra · IFFar Uruguaiana</div>
+    <div class="footer-socials">
+      <a href="#">GitHub</a>
+      <a href="#">Documentação</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// LOADER
+const lbar = document.getElementById('lbar');
+const lpct = document.getElementById('lpct');
+const llabel = document.getElementById('loader-label');
+const loader = document.getElementById('loader');
+let pct = 0;
+const steps = [
+  { to: 18, label: 'carregando constantes gravitacionais...' },
+  { to: 38, label: 'inicializando corpos celestes...' },
+  { to: 60, label: 'configurando motor de física...' },
+  { to: 80, label: 'preparando painel de telemetria...' },
+  { to: 100, label: 'sistema pronto.' },
+];
+let si = 0;
+function runLoader() {
+  if (si >= steps.length) return;
+  const step = steps[si];
+  llabel.textContent = step.label;
+  const interval = setInterval(() => {
+    pct++;
+    lbar.style.width = pct + '%';
+    lpct.textContent = pct + '%';
+    if (pct >= step.to) {
+      clearInterval(interval);
+      si++;
+      if (pct >= 100) {
+        setTimeout(() => { loader.classList.add('hidden'); }, 500);
+      } else {
+        setTimeout(runLoader, 180);
+      }
+    }
+  }, 16);
+}
+runLoader();
+
+// STARS
+const starsEl = document.getElementById('stars');
+for (let i = 0; i < 180; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  const sz = 1 + Math.random() * 1.5;
+  s.style.cssText = `left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*5}s;--delay:${Math.random()*5}s;--op:${0.2+Math.random()*0.6};width:${sz}px;height:${sz}px;`;
+  starsEl.appendChild(s);
+}
+
+// MARQUEE
+const items = [
+  'Física Gravitacional','Parâmetros Configuráveis','Telemetria em Tempo Real',
+  'Terra e Lua','Equação de Tsiolkovsky','Integração Numérica de Euler',
+  'Predefinições de Veículos','Motor Unity','IFFar Uruguaiana',
+  'Delta-V','Órbita Lunar','Dinâmica Orbital',
+];
+const track = document.getElementById('mtrack');
+[...items, ...items].forEach(txt => {
+  const d = document.createElement('div');
+  d.className = 'marquee-item';
+  d.innerHTML = `<span class="dot"></span>${txt}`;
+  track.appendChild(d);
+});
+
+// NAV
+const navEl = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  navEl.classList.toggle('scrolled', window.scrollY > 60);
+});
+
+// REVEAL
+const reveals = document.querySelectorAll('.reveal');
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.12 });
+reveals.forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
